@@ -230,7 +230,20 @@ lazy_static! {
                         .build()
                         .unwrap()
                 );
-            }
+            };
+
+            devices.push(
+                oci::LinuxDeviceBuilder::default()
+                    .path(PathBuf::from("/dev/cpu/0/msr"))
+                    .typ(oci::LinuxDeviceType::C)
+                    .major(202)
+                    .minor(203)
+                    .file_mode(0o660_u32)
+                    .uid(0xffffffff_u32)
+                    .gid(0xffffffff_u32)
+                    .build()
+                    .unwrap()
+            );
         }
 
         devices
