@@ -250,7 +250,7 @@ lazy_static! {
                     oci::LinuxDeviceBuilder::default()
                         .path(PathBuf::from(format!("/dev/cpu/{}/cpuid", i)))
                         .typ(oci::LinuxDeviceType::C)
-                        .major(202)
+                        .major(203)
                         .minor(i as i64)
                         .file_mode(0o444_u32)
                         .uid(0xffffffff_u32)
