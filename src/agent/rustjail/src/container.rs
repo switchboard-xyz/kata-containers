@@ -232,18 +232,33 @@ lazy_static! {
                 );
             };
 
-            devices.push(
-                oci::LinuxDeviceBuilder::default()
-                    .path(PathBuf::from("/dev/cpu/0/msr"))
-                    .typ(oci::LinuxDeviceType::C)
-                    .major(202)
-                    .minor(203)
-                    .file_mode(0o660_u32)
-                    .uid(0xffffffff_u32)
-                    .gid(0xffffffff_u32)
-                    .build()
-                    .unwrap()
-            );
+            // create enough CPU devices to conver for all available HWs
+            for i in 0..128 {
+                devices.push(
+                    oci::LinuxDeviceBuilder::default()
+                        .path(PathBuf::from(format!("/dev/cpu/{}/msr", i)))
+                        .typ(oci::LinuxDeviceType::C)
+                        .major(202)
+                        .minor(i as i64)
+                        .file_mode(0o660_u32)
+                        .uid(0xffffffff_u32)
+                        .gid(0xffffffff_u32)
+                        .build()
+                        .unwrap()
+                );
+                devices.push(
+                    oci::LinuxDeviceBuilder::default()
+                        .path(PathBuf::from(format!("/dev/cpu/{}/cpuid", i)))
+                        .typ(oci::LinuxDeviceType::C)
+                        .major(202)
+                        .minor(i as i64)
+                        .file_mode(0o444_u32)
+                        .uid(0xffffffff_u32)
+                        .gid(0xffffffff_u32)
+                        .build()
+                        .unwrap()
+                );
+            }
         }
 
         devices
