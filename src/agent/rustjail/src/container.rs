@@ -234,6 +234,11 @@ lazy_static! {
 
             // create enough CPU devices to conver for all available HWs
             for i in 0..128 {
+                let cpu_path = PathBuf::from(format!("/dev/cpu/{}", i));
+                if let Err(_) = fs::create_dir_all(&cpu_path) {
+                    continue;
+                };
+
                 devices.push(
                     oci::LinuxDeviceBuilder::default()
                         .path(PathBuf::from(format!("/dev/cpu/{}/msr", i)))
