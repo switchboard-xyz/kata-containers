@@ -970,11 +970,19 @@ fn dev_rel_path(path: &PathBuf) -> Option<&Path> {
 fn create_devices(devices: &[LinuxDevice], bind: bool) -> Result<()> {
     let op: fn(&LinuxDevice, &Path) -> Result<()> = if bind { bind_dev } else { mknod_dev };
     let old = stat::umask(Mode::from_bits_truncate(0o000));
+
+    for dev in DEFAULT_DEVICES.iter().chain(devices.iter()) {
+        if let Some(parent) = dev.path().parent() {
+            fs::create_dir_all(parent.strip_prefix("/").unwrap_or(parent))?;
+        }
+    }
+
     for dev in DEFAULT_DEVICES.iter() {
         let dev_path = dev.path().display().to_string();
         let path = Path::new(&dev_path[1..]);
         op(dev, path).context(format!("Creating container device {:?}", dev))?;
     }
+
     for dev in devices {
         let dev_path = &dev.path();
         let path = dev_rel_path(dev_path).ok_or_else(|| {
