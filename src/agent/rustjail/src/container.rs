@@ -231,39 +231,42 @@ lazy_static! {
                         .unwrap()
                 );
             };
+        }
 
-            // create enough CPU devices to conver for all available HWs
-            for i in 0..128 {
-                let cpu_path = PathBuf::from(format!("/dev/cpu/{}", i));
-                if let Err(_) = fs::create_dir_all(&cpu_path) {
-                    continue;
-                };
+        // create enough CPU devices to conver for all available HWs
+        for i in 0..128 {
+            let cpu_path = PathBuf::from(format!("/dev/cpu/{}", i));
+            if let Err(_) = fs::create_dir_all(&cpu_path) {
+                continue;
+            };
 
-                devices.push(
-                    oci::LinuxDeviceBuilder::default()
-                        .path(PathBuf::from(format!("/dev/cpu/{}/msr", i)))
-                        .typ(oci::LinuxDeviceType::C)
-                        .major(202)
-                        .minor(i as i64)
-                        .file_mode(0o660_u32)
-                        .uid(0xffffffff_u32)
-                        .gid(0xffffffff_u32)
-                        .build()
-                        .unwrap()
-                );
-                devices.push(
-                    oci::LinuxDeviceBuilder::default()
-                        .path(PathBuf::from(format!("/dev/cpu/{}/cpuid", i)))
-                        .typ(oci::LinuxDeviceType::C)
-                        .major(203)
-                        .minor(i as i64)
-                        .file_mode(0o444_u32)
-                        .uid(0xffffffff_u32)
-                        .gid(0xffffffff_u32)
-                        .build()
-                        .unwrap()
-                );
-            }
+            // tmp disable cpu registers devices
+            /*
+            devices.push(
+                oci::LinuxDeviceBuilder::default()
+                    .path(PathBuf::from(format!("/dev/cpu/{}/msr", i)))
+                    .typ(oci::LinuxDeviceType::C)
+                    .major(202)
+                    .minor(i as i64)
+                    .file_mode(0o660_u32)
+                    .uid(0xffffffff_u32)
+                    .gid(0xffffffff_u32)
+                    .build()
+                    .unwrap()
+            );
+            devices.push(
+                oci::LinuxDeviceBuilder::default()
+                    .path(PathBuf::from(format!("/dev/cpu/{}/cpuid", i)))
+                    .typ(oci::LinuxDeviceType::C)
+                    .major(203)
+                    .minor(i as i64)
+                    .file_mode(0o444_u32)
+                    .uid(0xffffffff_u32)
+                    .gid(0xffffffff_u32)
+                    .build()
+                    .unwrap()
+            );
+            */
         }
 
         devices
