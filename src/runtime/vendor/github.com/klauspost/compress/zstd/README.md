@@ -436,6 +436,6 @@ how to compress and decompress files inside zip archives.
 Contributions are always welcome. 
 For new features/fixes, remember to add tests and for performance enhancements include benchmarks.
 
-For general feedback and experience reports, feel free to open an issue or write me on [Twitter](https://twitter.com/sh0dan).
+For general feedback and experience reports, feel free to open an issue or write me on [X](https://x.com/sh0dan).
 
 This package includes the excellent [`github.com/cespare/xxhash`](https://github.com/cespare/xxhash) package Copyright (c) 2016 Caleb Spare.

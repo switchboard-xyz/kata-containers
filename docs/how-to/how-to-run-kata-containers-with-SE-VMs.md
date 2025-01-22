@@ -337,7 +337,7 @@ for confidential containers.
 $ cd $GOPATH/src/github.com/kata-containers/kata-containers
 $ host_key_document=$HOME/host-key-document/HKD-0000-0000000.crt
 $ mkdir hkd_dir && cp $host_key_document hkd_dir
-$ # kernel-confidential and rootfs-initrd-confidential are built automactially by the command below
+$ # kernel-confidential and rootfs-initrd-confidential are built automatically by the command below
 $ HKD_PATH=hkd_dir SE_KERNEL_PARAMS="agent.log=debug" make boot-image-se-tarball
 $ make qemu-tarball
 $ make virtiofsd-tarball

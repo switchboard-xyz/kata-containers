@@ -7,7 +7,7 @@ typically for importing into an
 Elastic/Fluentd/Kibana([EFK](https://github.com/kubernetes-sigs/instrumentation-addons/tree/master/fluentd-elasticsearch#running-efk-stack-in-production))
 or Elastic/Logstash/Kibana([ELK](https://www.elastic.co/elastic-stack)) stack.
 
-The majority of this document focusses on CRI-O based (classic) Kata runtime. Much of that information
+The majority of this document focuses on CRI-O based (classic) Kata runtime. Much of that information
 also applies to the Kata `shimv2` runtime.  Differences pertaining to Kata `shimv2` can be found in their
 [own section](#kata-shimv2).
 
@@ -105,7 +105,7 @@ index 75e386984..83bea48b9 100644
 ```
 
 > **Note:** After making this change you will need to build your own `minikube` to encapsulate
-> and use this change, or fine another method to (re-)launch the Fluentd containers for the change
+> and use this change, or find another method to (re-)launch the Fluentd containers for the change
 > to take effect.
 
 ### Pull from `systemd`

@@ -4,7 +4,7 @@ In cloud-native scenarios, there is an increased demand for container startup sp
 
 Also, we provide the following designs:
 
-- Turn key solution with builtin `Dragonball` Sandbox
+- Turnkey solution with builtin `Dragonball` Sandbox
 - Async I/O to reduce resource consumption
 - Extensible framework for multiple services, runtimes and hypervisors
 - Lifecycle management for sandbox and container associated resources
@@ -31,7 +31,7 @@ with the Rust-based implementation.
 ![not_builtin_vmm](./images/not_built_in_vmm.png)
 As shown in the figure, runtime and VMM are separate processes. The runtime process forks the VMM process and interacts through the inter-process RPC. Typically, process interaction consumes more resources than peers within the process, and it will result in relatively low efficiency. At the same time, the cost of resource operation and maintenance should be considered. For example, when performing resource recovery under abnormal conditions, the exception of any process must be detected by others and activate the appropriate resource recovery process. If there are additional processes, the recovery becomes even more difficult.
 #### How To Support Built-in VMM
-We provide `Dragonball` Sandbox to enable built-in VMM by integrating VMM's function into the Rust library. We could perform VMM-related functionalities by using the library. Because runtime and VMM  are in the same process, there is a benefit in terms of message processing speed and API synchronization. It can also guarantee the consistency of the runtime and the VMM life cycle, reducing resource recovery and exception handling maintenance, as shown in the figure:
+We provide `Dragonball` Sandbox to enable built-in VMM by integrating VMM's function into the Rust library. We could perform VMM-related functionalities by using the library. Because the runtime and VMM are in the same process, there is a benefit in terms of message processing speed and API synchronization. It can also guarantee the consistency of the runtime and the VMM life cycle, reducing resource recovery and exception handling maintenance, as shown in the figure:
 ![builtin_vmm](./images/built_in_vmm.png)
 ### Async Support
 #### Why Need Async
