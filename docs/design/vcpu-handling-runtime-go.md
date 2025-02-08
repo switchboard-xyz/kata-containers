@@ -9,7 +9,7 @@ equal to 1 for fast boot time and a small memory footprint per virtual machine.
 Be aware that increasing this value negatively impacts the virtual machine's
 boot time and memory footprint.
 In general, we recommend that you do not edit this variable, unless you know
-what are you doing. If your container needs more than one vCPU, use
+what you are doing. If your container needs more than one vCPU, use
 [Kubernetes `cpu` limits][1] to assign more resources.
 
 *Kubernetes*
@@ -61,7 +61,7 @@ in the configuration file. In the case of Kubernetes pods, containers without a
 CPU constraint use and share between them the default number of vCPUs. For
 example, if `default_vcpus` is equal to 1 and you have 2 containers without CPU
 constraints with each container trying to consume 100% of vCPU, the resources
-divide in two parts, 50% of vCPU for each container because your virtual
+divides into two parts, 50% of vCPU for each container because your virtual
 machine does not have enough resources to satisfy containers needs. If you want
 to give access to a greater or lesser portion of vCPUs to a specific container,
 use [Kubernetes `cpu` requests][1].
@@ -117,8 +117,8 @@ number using the `default_vcpus` option in the configuration file, each virtual
 machine starts with that number of vCPUs. One limitation of this approach is
 that these vCPUs cannot be removed later and you might be wasting
 resources. For example, if you set `default_vcpus` to 8 and run only one
-container with a CPU constraint of 1 vCPUs, you might be wasting 7 vCPUs since
-the virtual machine starts with 8 vCPUs and 1 vCPUs is added and assigned
+container with a CPU constraint of 1 vCPU, you might be wasting 7 vCPUs since
+the virtual machine starts with 8 vCPUs and 1 vCPU is added and assigned
 to the container. Non-container processes might be able to use 8 vCPUs but they
 use a maximum 1 vCPU, hence 7 vCPUs might not be used.
 
