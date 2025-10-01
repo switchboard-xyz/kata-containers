@@ -27,9 +27,10 @@ on:
         required: true
       QUAY_DEPLOYER_PASSWORD:
         required: true
+      KBUILD_SIGN_PIN:
+        required: true
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   build-kata-static-tarball-amd64:
@@ -43,6 +44,8 @@ jobs:
       tarball-suffix: -${{ inputs.tag }}
       commit-hash: ${{ inputs.commit-hash }}
       target-branch: ${{ inputs.target-branch }}
+    secrets:
+      KBUILD_SIGN_PIN: ${{ secrets.KBUILD_SIGN_PIN }}
 
   publish-kata-deploy-payload-amd64:
     needs: build-kata-static-tarball-amd64
@@ -63,13 +66,14 @@ jobs:
       QUAY_DEPLOYER_PASSWORD: ${{ secrets.QUAY_DEPLOYER_PASSWORD }}
 
   build-and-publish-tee-confidential-unencrypted-image:
+    name: build-and-publish-tee-confidential-unencrypted-image
     permissions:
       contents: read
       packages: write
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ inputs.commit-hash }}
           fetch-depth: 0
@@ -119,3 +123,6 @@ jobs:
       AZ_APPID: ${{ secrets.AZ_APPID }}
       AZ_TENANT_ID: ${{ secrets.AZ_TENANT_ID }}
       AZ_SUBSCRIPTION_ID: ${{ secrets.AZ_SUBSCRIPTION_ID }}
+    permissions:
+      contents: read
+      id-token: write

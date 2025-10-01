@@ -5,8 +5,7 @@ on:
       - main
   workflow_dispatch:
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -25,6 +24,7 @@ jobs:
       target-branch: ${{ github.ref_name }}
     secrets:
       QUAY_DEPLOYER_PASSWORD: ${{ secrets.QUAY_DEPLOYER_PASSWORD }}
+      KBUILD_SIGN_PIN: ${{ secrets.KBUILD_SIGN_PIN }}
 
   build-assets-arm64:
     permissions:
@@ -136,6 +136,7 @@ jobs:
       QUAY_DEPLOYER_PASSWORD: ${{ secrets.QUAY_DEPLOYER_PASSWORD }}
 
   publish-manifest:
+    name: publish-manifest
     runs-on: ubuntu-22.04
     permissions:
       contents: read
@@ -143,7 +144,7 @@ jobs:
     needs: [publish-kata-deploy-payload-amd64, publish-kata-deploy-payload-arm64, publish-kata-deploy-payload-s390x, publish-kata-deploy-payload-ppc64le]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
 

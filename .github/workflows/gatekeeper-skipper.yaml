@@ -31,18 +31,18 @@ on:
       skip_static:
         value: ${{ jobs.skipper.outputs.skip_static }}
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   skipper:
+    name: skipper
     runs-on: ubuntu-22.04
     outputs:
       skip_build: ${{ steps.skipper.outputs.skip_build }}
       skip_test: ${{ steps.skipper.outputs.skip_test }}
       skip_static: ${{ steps.skipper.outputs.skip_static }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ inputs.commit-hash }}
           fetch-depth: 0

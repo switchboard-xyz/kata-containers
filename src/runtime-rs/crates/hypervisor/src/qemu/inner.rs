@@ -3,31 +3,43 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
-use super::cmdline_generator::{get_network_device, QemuCmdLine, QMP_SOCKET_FILE};
+use super::cmdline_generator::{get_network_device, QemuCmdLine};
 use super::qmp::Qmp;
 use crate::device::topology::PCIePort;
+use crate::qemu::qmp::get_qmp_socket_path;
 use crate::{
-    device::driver::ProtectionDeviceConfig, hypervisor_persist::HypervisorState,
-    utils::enter_netns, HypervisorConfig, MemoryConfig, VcpuThreadIds, VsockDevice,
-    HYPERVISOR_QEMU,
+    device::driver::ProtectionDeviceConfig, hypervisor_persist::HypervisorState, selinux,
+    HypervisorConfig, MemoryConfig, VcpuThreadIds, VsockDevice, HYPERVISOR_QEMU,
 };
+
+use crate::utils::{
+    bytes_to_megs, create_dir_all_with_inherit_owner, enter_netns, get_jailer_root, megs_to_bytes,
+    set_groups, vm_cleanup,
+};
+
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
 use kata_sys_util::netns::NetnsGuard;
+use kata_types::build_path;
+use kata_types::config::hypervisor::RootlessUser;
+use kata_types::rootless::is_rootless;
 use kata_types::{
     capabilities::{Capabilities, CapabilityBits},
     config::KATA_PATH,
 };
+use nix::unistd::{setgid, setuid, Gid, Uid};
 use persist::sandbox_persist::Persist;
 use std::cmp::Ordering;
-use std::collections::HashMap;
 use std::convert::TryInto;
 use std::path::Path;
 use std::process::Stdio;
-use tokio::sync::{mpsc, Mutex};
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
     process::{Child, ChildStderr, Command},
+};
+use tokio::{
+    net::UnixStream,
+    sync::{mpsc, Mutex},
 };
 
 const VSOCK_SCHEME: &str = "vsock";
@@ -61,13 +73,25 @@ impl QemuInner {
         }
     }
 
-    pub(crate) async fn prepare_vm(&mut self, id: &str, netns: Option<String>) -> Result<()> {
+    pub(crate) async fn prepare_vm(
+        &mut self,
+        id: &str,
+        netns: Option<String>,
+        selinux_label: Option<String>,
+    ) -> Result<()> {
         info!(sl!(), "Preparing QEMU VM");
         self.id = id.to_string();
         self.netns = netns;
 
-        let vm_path = [KATA_PATH, self.id.as_str()].join("/");
-        std::fs::create_dir_all(vm_path)?;
+        if !self.hypervisor_config().disable_selinux {
+            if let Some(label) = selinux_label.as_ref() {
+                self.config.security_info.selinux_label = Some(label.to_string());
+                selinux::set_exec_label(label).context("failed to set SELinux process label")?;
+            }
+        }
+
+        let vm_path = Path::new(build_path(KATA_PATH).as_str()).join(self.id.as_str());
+        create_dir_all_with_inherit_owner(vm_path, 0o750)?;
 
         Ok(())
     }
@@ -136,6 +160,7 @@ impl QemuInner {
                             cmdline.add_sev_snp_protection_device(
                                 sev_snp_cfg.cbitpos,
                                 &sev_snp_cfg.firmware,
+                                &sev_snp_cfg.host_data,
                             )
                         } else {
                             cmdline.add_sev_protection_device(
@@ -191,10 +216,49 @@ impl QemuInner {
 
         info!(sl!(), "qemu cmd: {:?}", command);
 
-        // we need move the qemu process into Network Namespace.
+        let user: Option<RootlessUser> = if is_rootless() {
+            Some(
+                self.config
+                    .security_info
+                    .rootless_user
+                    .clone()
+                    .ok_or_else(|| {
+                        std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            "rootless user must be specified for rootless qemu",
+                        )
+                    })?,
+            )
+        } else {
+            None
+        };
+
+        // we need move the qemu process into Network Namespace and set SELinux label.
         unsafe {
+            let selinux_label = self.config.security_info.selinux_label.clone();
             let _pre_exec = command.pre_exec(move || {
                 let _ = enter_netns(&netns);
+                if let Some(label) = selinux_label.as_ref() {
+                    if let Err(e) = selinux::set_exec_label(label) {
+                        error!(sl!(), "Failed to set SELinux label in child process: {}", e);
+                        // Don't return error here to avoid breaking the process startup
+                        // Log the error and continue
+                    } else {
+                        info!(
+                            sl!(),
+                            "Successfully set SELinux label in child process: {}", &label
+                        );
+                    }
+                }
+                if let Some(user) = &user {
+                    let groups = user.groups.clone();
+                    let gid = Gid::from_raw(user.gid);
+                    let uid = Uid::from_raw(user.uid);
+
+                    let _ = set_groups(&groups);
+                    let _ = setgid(gid).context("setgid failed");
+                    let _ = setuid(uid).context("setuid failed");
+                }
 
                 Ok(())
             });
@@ -213,12 +277,20 @@ impl QemuInner {
 
         tokio::spawn(log_qemu_stderr(stderr, exit_notify));
 
-        match Qmp::new(QMP_SOCKET_FILE) {
+        let qmp_socket_path = get_qmp_socket_path(self.id.as_str());
+
+        match Qmp::new(&qmp_socket_path) {
             Ok(qmp) => self.qmp = Some(qmp),
             Err(e) => {
                 error!(sl!(), "couldn't initialise QMP: {:?}", e);
                 return Err(e);
             }
+        }
+
+        //When hypervisor debug is enabled, output the kernel boot messages for debugging.
+        if self.config.debug_info.enable_debug {
+            let stream = UnixStream::connect(console_socket_path.as_os_str()).await?;
+            tokio::spawn(log_qemu_console(stream));
         }
 
         Ok(())
@@ -285,13 +357,14 @@ impl QemuInner {
         todo!()
     }
 
-    pub(crate) async fn get_thread_ids(&self) -> Result<VcpuThreadIds> {
+    pub(crate) async fn get_thread_ids(&mut self) -> Result<VcpuThreadIds> {
         info!(sl!(), "QemuInner::get_thread_ids()");
-        //todo!()
-        let vcpu_thread_ids: VcpuThreadIds = VcpuThreadIds {
-            vcpus: HashMap::new(),
-        };
-        Ok(vcpu_thread_ids)
+
+        Ok(self
+            .qmp
+            .as_mut()
+            .and_then(|qmp| qmp.get_vcpu_thread_ids().ok())
+            .unwrap_or_default())
     }
 
     pub(crate) async fn get_vmm_master_tid(&self) -> Result<u32> {
@@ -322,9 +395,8 @@ impl QemuInner {
 
     pub(crate) async fn cleanup(&self) -> Result<()> {
         info!(sl!(), "QemuInner::cleanup()");
-        let vm_path = [KATA_PATH, self.id.as_str()].join("/");
-        std::fs::remove_dir_all(vm_path)?;
-        Ok(())
+        let vm_path = [build_path(KATA_PATH).as_str(), self.id.as_str()].join("/");
+        vm_cleanup(&self.config, vm_path.as_str())
     }
 
     pub(crate) async fn resize_vcpu(
@@ -381,14 +453,18 @@ impl QemuInner {
     }
 
     pub(crate) async fn get_jailer_root(&self) -> Result<String> {
-        Ok("".into())
+        let root_path = get_jailer_root(self.id.as_str());
+        create_dir_all_with_inherit_owner(&root_path, 0o750)?;
+        Ok(root_path)
     }
 
     pub(crate) async fn capabilities(&self) -> Result<Capabilities> {
         let mut caps = Capabilities::default();
 
         // Confidential Guest doesn't permit virtio-fs.
-        let flags = if self.hypervisor_config().security_info.confidential_guest {
+        let flags = if self.hypervisor_config().security_info.confidential_guest
+            || self.hypervisor_config().shared_fs.shared_fs.is_none()
+        {
             CapabilityBits::BlockDeviceSupport | CapabilityBits::BlockDeviceHotplugSupport
         } else {
             CapabilityBits::BlockDeviceSupport
@@ -452,15 +528,6 @@ impl QemuInner {
             sl!(),
             "QemuInner::resize_memory(): asked to resize memory to {} MB", new_total_mem_mb
         );
-
-        // stick to the apparent de facto convention and represent megabytes
-        // as u32 and bytes as u64
-        fn bytes_to_megs(bytes: u64) -> u32 {
-            (bytes / (1 << 20)) as u32
-        }
-        fn megs_to_bytes(bytes: u32) -> u64 {
-            bytes as u64 * (1 << 20)
-        }
 
         let qmp = match self.qmp {
             Some(ref mut qmp) => qmp,
@@ -573,6 +640,24 @@ impl QemuInner {
     }
 }
 
+async fn log_qemu_console(console: UnixStream) -> Result<()> {
+    info!(sl!(), "starting reading qemu console");
+
+    let stderr_reader = BufReader::new(console);
+    let mut stderr_lines = stderr_reader.lines();
+
+    while let Some(buffer) = stderr_lines
+        .next_line()
+        .await
+        .context("next_line() failed on qemu console")?
+    {
+        info!(sl!(), "vm console: {:?}", buffer);
+    }
+
+    info!(sl!(), "finished reading qemu console");
+    Ok(())
+}
+
 async fn log_qemu_stderr(stderr: ChildStderr, exit_notify: mpsc::Sender<()>) -> Result<()> {
     info!(sl!(), "starting reading qemu stderr");
 
@@ -636,16 +721,24 @@ impl QemuInner {
                 qmp.hotplug_network_device(&netdev, &virtio_net_device)?
             }
             DeviceType::Block(mut block_device) => {
-                block_device.config.pci_path = qmp
+                let (pci_path, scsi_addr) = qmp
                     .hotplug_block_device(
                         &self.config.blockdev_info.block_device_driver,
-                        &block_device.device_id,
+                        block_device.config.index,
                         &block_device.config.path_on_host,
+                        &block_device.config.blkdev_aio.to_string(),
                         block_device.config.is_direct,
                         block_device.config.is_readonly,
                         block_device.config.no_drop,
                     )
                     .context("hotplug block device")?;
+
+                if pci_path.is_some() {
+                    block_device.config.pci_path = pci_path;
+                }
+                if scsi_addr.is_some() {
+                    block_device.config.scsi_addr = scsi_addr;
+                }
 
                 return Ok(DeviceType::Block(block_device));
             }

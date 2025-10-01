@@ -19,9 +19,8 @@ extern crate scopeguard;
 extern crate slog;
 
 use anyhow::{anyhow, bail, Context, Result};
-use base64::Engine;
 use cfg_if::cfg_if;
-use clap::{AppSettings, Parser};
+use clap::Parser;
 use const_format::concatcp;
 use initdata::{InitdataReturnValue, AA_CONFIG_PATH, CDH_CONFIG_PATH};
 use nix::fcntl::OFlag;
@@ -31,6 +30,7 @@ use nix::unistd::{self, dup, sync, Pid};
 use std::env;
 use std::ffi::OsStr;
 use std::fs::{self, File};
+use std::io::ErrorKind;
 use std::os::unix::fs::{self as unixfs, FileTypeExt};
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
@@ -128,7 +128,7 @@ lazy_static! {
 
 #[derive(Parser)]
 // The default clap version info doesn't match our form, so we need to override it
-#[clap(global_setting(AppSettings::DisableVersionFlag))]
+#[clap(disable_version_flag = true)]
 struct AgentOpts {
     /// Print the version information
     #[clap(short, long)]
@@ -466,8 +466,17 @@ fn attestation_binaries_available(logger: &Logger, procs: &GuestComponentsProcs)
         _ => vec![],
     };
     for binary in binaries.iter() {
-        if !Path::new(binary).exists() {
-            warn!(logger, "{} not found", binary);
+        let exists = Path::new(binary)
+            .try_exists()
+            .unwrap_or_else(|error| match error.kind() {
+                ErrorKind::NotFound => {
+                    warn!(logger, "{} not found", binary);
+                    false
+                }
+                _ => panic!("Path existence check failed for '{}': {}", binary, error),
+            });
+
+        if !exists {
             return false;
         }
     }
@@ -485,12 +494,9 @@ async fn launch_guest_component_procs(
 
     debug!(logger, "spawning attestation-agent process {}", AA_PATH);
     let mut aa_args = vec!["--attestation_sock", AA_ATTESTATION_URI];
-    let initdata_parameter;
-    if let Some(initdata_return_value) = initdata_return_value {
-        initdata_parameter =
-            base64::engine::general_purpose::STANDARD.encode(&initdata_return_value.digest);
-        aa_args.push("--initdata");
-        aa_args.push(&initdata_parameter);
+    if initdata_return_value.is_some() {
+        aa_args.push("--initdata-toml");
+        aa_args.push(initdata::INITDATA_TOML_PATH);
     }
 
     launch_process(
